@@ -31,6 +31,7 @@ from pkcs7.asn1_models.certificate_extensions import *
 from pkcs7.debug import *
 from pkcs7.asn1_models.decoder_workarounds import decode
 import datetime, time
+import collections
 
 class CertificateError(Exception):
     pass
@@ -192,11 +193,11 @@ class SubjectAltNameExt():
     def __init__(self, asn1_subjectAltName):
         # Creates a dictionary for the component types found in
         # SubjectAltName. Each dictionary entry is a list of names
-        self.names = collections.defaultdict(list)
+        self.values = collections.defaultdict(list)
         for gname in asn1_subjectAltName:
             component_type = gname.getName()
             name = unicode(gname.getComponent())
-            names[component_type].append(name)
+            self.values[component_type].append(name)
 
 class BasicConstraintsExt():
     '''
