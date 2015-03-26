@@ -34,7 +34,7 @@ import datetime, time
 
 class CertificateError(Exception):
     pass
-    
+
 class Name():
     '''
     Represents Name (structured, tagged).
@@ -50,7 +50,7 @@ class Name():
         "2.5.4.8": "ST",
         "2.5.4.10": "O",
         "2.5.4.11": "OU",
-        
+
         "2.5.4.45": "X500UID",
         "1.2.840.113549.1.9.1": "email",
         "2.5.4.17": "zip",
@@ -66,14 +66,14 @@ class Name():
         "2.5.4.65": "pseudonym",
         "0.9.2342.19200300.100.1.25": "DC",
     }
-    
+
     def __init__(self, name):
         self.__attributes = {}
         for name_part in name:
             for attr in name_part:
-                type = str(attr.getComponentByPosition(0).getComponentByName('type'))                
+                type = str(attr.getComponentByPosition(0).getComponentByName('type'))
                 value = str(attr.getComponentByPosition(0).getComponentByName('value'))
-                
+
                 #use numeric OID form only if mapping is not known
                 typeStr = Name._oid2Name.get(type) or type
                 values = self.__attributes.get(typeStr)
@@ -81,7 +81,7 @@ class Name():
                     self.__attributes[typeStr] = [value]
                 else:
                     values.append(value)
-    
+
     def __str__(self):
         ''' Returns the Distinguished name as string. The string for the same
         set of attributes is always the same.
@@ -93,10 +93,10 @@ class Name():
             values = sorted(self.__attributes.get(key))
             valuesStr = ", ".join(["%s=%s" % (key, value) for value in values])
             valueStrings.append(valuesStr)
-        
+
         return ", ".join(valueStrings)
-            
-        
+
+
     def get_attributes(self):
         return self.__attributes.copy()
 
@@ -112,13 +112,13 @@ class ValidityInterval():
             validity.getComponentByName("notBefore"))
         self.valid_to = self._getGeneralizedTime(
             validity.getComponentByName("notAfter"))
-        
+
     def get_valid_from_as_datetime(self):
       return self.parse_date(self.valid_from)
-    
+
     def get_valid_to_as_datetime(self):
       return self.parse_date(self.valid_to)
-       
+
     @staticmethod
     def _getGeneralizedTime(timeComponent):
         """Return time from Time component in YYYYMMDDHHMMSSZ format"""
@@ -132,7 +132,7 @@ class ValidityInterval():
             timeValue = timeComponent.getComponent()._value
             shortyear = int(timeValue[:2])
             return (shortyear >= 50 and "19" or "20") + timeValue
-            
+
     @classmethod
     def parse_date(cls, date):
         """
@@ -164,14 +164,14 @@ class PublicKeyInfo():
     UNKNOWN = -1
     RSA = 0
     DSA = 1
-    
+
     def __init__(self, public_key_info):
         algorithm = public_key_info.getComponentByName("algorithm")
         parameters = algorithm.getComponentByName("parameters")
-        
+
         self.alg = str(algorithm)
         bitstr_key = public_key_info.getComponentByName("subjectPublicKey")
-        
+
         if self.alg == "1.2.840.113549.1.1.1":
             self.key = get_RSA_pub_key_material(bitstr_key)
             self.algType = PublicKeyInfo.RSA
@@ -190,12 +190,13 @@ class SubjectAltNameExt():
     Subject alternative name extension.
     '''
     def __init__(self, asn1_subjectAltName):
-        self.names = []
-        #only parsing out DNS names, others (like IP address) are omitted
+        # Creates a dictionary for the component types found in
+        # SubjectAltName. Each dictionary entry is a list of names
+        self.names = collections.defaultdict(list)
         for gname in asn1_subjectAltName:
-            dNSName = gname.getComponentByName("dNSName")
-            if dNSName:
-                self.names.append(str(dNSName))
+            component_type = gname.getName()
+            name = unicode(gname.getComponent())
+            names[component_type].append(name)
 
 class BasicConstraintsExt():
     '''
@@ -206,12 +207,12 @@ class BasicConstraintsExt():
         self.max_path_len = None
         if asn1_bConstraints.getComponentByName("pathLen") is not None:
             self.max_path_len = asn1_bConstraints.getComponentByName("pathLen")._value
-        
+
 
 class KeyUsageExt():
     '''
-    Key usage extension. 
-    '''    
+    Key usage extension.
+    '''
     def __init__(self, asn1_keyUsage):
         self.digitalSignature = False    # (0),
         self.nonRepudiation = False     # (1),
@@ -221,8 +222,8 @@ class KeyUsageExt():
         self.keyCertSign = False        # (5),
         self.cRLSign = False            # (6),
         self.encipherOnly = False       # (7),
-        self.decipherOnly = False       # (8) 
-        
+        self.decipherOnly = False       # (8)
+
         bits = asn1_keyUsage._value
         try:
             if (bits[0]): self.digitalSignature = True
@@ -231,7 +232,7 @@ class KeyUsageExt():
             if (bits[3]): self.dataEncipherment = True
             if (bits[4]): self.keyAgreement = True
             if (bits[5]): self.keyCertSign = True
-            if (bits[6]): self.cRLSign = True    
+            if (bits[6]): self.cRLSign = True
             if (bits[7]): self.encipherOnly = True
             if (bits[8]): self.decipherOnly = True
         except IndexError:
@@ -240,7 +241,7 @@ class KeyUsageExt():
 class ExtendedKeyUsageExt():
     '''
     Extended key usage extension.
-    '''    
+    '''
     #The values of the _keyPurposeAttrs dict will be set to True/False as
     #attributes of this objects depending on whether the extKeyUsage lists them.
     _keyPurposeAttrs = {
@@ -253,10 +254,10 @@ class ExtendedKeyUsageExt():
         "1.3.6.1.5.5.7.3.7": "ipsecUser",
         "1.3.6.1.5.5.7.3.8": "timeStamping",
     }
-    
+
     def __init__(self, asn1_extKeyUsage):
         usageOIDs = set([tuple_to_OID(usageOID) for usageOID in asn1_extKeyUsage])
-        
+
         for (oid, attr) in ExtendedKeyUsageExt._keyPurposeAttrs.items():
             setattr(self, attr, oid in usageOIDs)
 
@@ -274,14 +275,14 @@ class AuthorityKeyIdExt():
             issuer = asn1_authKeyId.getComponentByName("authorityCertIssuer")
             iss = str(issuer.getComponentByName("name"))
             self.auth_cert_issuer = iss
-    
+
 class SubjectKeyIdExt():
     '''
     Subject Key Identifier extension. Just the octet string.
     '''
     def __init__(self, asn1_subKey):
         self.subject_key_id = asn1_subKey._value
-      
+
 class PolicyQualifier():
     '''
     Certificate policy qualifier. Consist of id and
@@ -293,7 +294,7 @@ class PolicyQualifier():
             qual = asn1_pQual.getComponentByName("qualifier")
             self.qualifier = None
             # this is a choice - only one of following types will be non-null
-            
+
             comp = qual.getComponentByName("cpsUri")
             if comp is not None:
                 self.qualifier = str(comp)
@@ -301,7 +302,7 @@ class PolicyQualifier():
             #comp = qual.getComponentByName("userNotice")
             #if comp is not None:
             #    self.qualifier = comp
-            
+
 class AuthorityInfoAccessExt():
     '''
     Authority information access.
@@ -314,13 +315,13 @@ class AuthorityInfoAccessExt():
         "1.3.6.1.5.5.7.48.1": "ocsp",
         "1.3.6.1.5.5.7.48.2": "caIssuers",
     }
-    
+
     def __init__(self, asn1_authInfo):
         self.id = tuple_to_OID(asn1_authInfo.getComponentByName("accessMethod"))
         self.access_location = str(asn1_authInfo.getComponentByName("accessLocation").getComponent())
         self.access_method = AuthorityInfoAccessExt._accessMethods.get(self.id)
         pass
-    
+
 class CertificatePolicyExt():
     '''
     Certificate policy extension.
@@ -346,8 +347,8 @@ class Reasons():
         self.cessationOfOperation = False   #(5),
         self.certificateHold = False   #(6),
         self.privilegeWithdrawn = False   #(7),
-        self.aACompromise = False   #(8) 
-        
+        self.aACompromise = False   #(8)
+
         bits = asn1_rflags._value
         try:
             if (bits[0]): self.unused = True
@@ -356,7 +357,7 @@ class Reasons():
             if (bits[3]): self.affiliationChanged = True
             if (bits[4]): self.superseded = True
             if (bits[5]): self.cessationOfOperation = True
-            if (bits[6]): self.certificateHold = True    
+            if (bits[6]): self.certificateHold = True
             if (bits[7]): self.privilegeWithdrawn = True
             if (bits[8]): self.aACompromise = True
         except IndexError:
@@ -394,27 +395,27 @@ class QcStatementExt():
         self.statementInfo = asn1_caStatement.getComponentByName("stmtInfo")
         if self.statementInfo is not None:
             self.statementInfo = str(self.statementInfo)
-        
+
 class PolicyConstraintsExt:
     def __init__(self, asn1_policyConstraints):
         self.requireExplicitPolicy = None
         self.inhibitPolicyMapping = None
-        
+
         requireExplicitPolicy = asn1_policyConstraints.getComponentByName("requireExplicitPolicy")
         inhibitPolicyMapping = asn1_policyConstraints.getComponentByName("inhibitPolicyMapping")
-        
+
         if requireExplicitPolicy is not None:
             self.requireExplicitPolicy = requireExplicitPolicy._value
-        
+
         if inhibitPolicyMapping is not None:
             self.inhibitPolicyMapping = inhibitPolicyMapping._value
-        
+
 class NameConstraint:
     def __init__(self, base, minimum, maximum):
         self.base = base
         self.minimum = minimum
         self.maximum = maximum
-    
+
     def __repr__(self):
         return "NameConstraint(base: %s, min: %s, max: %s)" % (repr(self.base), self.minimum, self.maximum)
 
@@ -425,37 +426,37 @@ class NameConstraintsExt:
     def __init__(self, asn1_nameConstraints):
         self.permittedSubtrees = []
         self.excludedSubtrees = []
-        
+
         permittedSubtrees = asn1_nameConstraints.getComponentByName("permittedSubtrees")
         excludedSubtrees = asn1_nameConstraints.getComponentByName("excludedSubtrees")
-        
+
         self.permittedSubtrees = self._parseSubtree(permittedSubtrees)
         self.excludedSubtrees = self._parseSubtree(excludedSubtrees)
-    
+
     def _parseSubtree(self, asn1Subtree):
         if asn1Subtree is None:
             return []
-            
+
         subtreeList = []
-        
+
         for subtree in asn1Subtree:
             #TODO: somehow extract the fucking type of GeneralName
             base = subtree.getComponentByName("base").getComponent()#ByName("dNSName")
             if base is None:
                 continue
-            
+
             base = str(base)
-            
+
             minimum = subtree.getComponentByName("minimum")._value
             maximum = subtree.getComponentByName("maximum")
             if maximum is not None:
                 maximum = maximum._value
-            
+
             subtreeList.append(NameConstraint(base, minimum, maximum))
-            
+
         return subtreeList
-        
-        
+
+
 class NetscapeCertTypeExt:
     def __init__(self, asn1_netscapeCertType):
         #https://www.mozilla.org/projects/security/pki/nss/tech-notes/tn3.html
@@ -463,7 +464,7 @@ class NetscapeCertTypeExt:
         self.clientCert = len(bits) > 0 and bool(bits[0])
         self.serverCert = len(bits) > 1 and bool(bits[1])
         self.caCert = len(bits) > 5 and bool(bits[5])
-        
+
 class ExtensionType:
     '''"Enum" of extensions we know how to parse.'''
     SUBJ_ALT_NAME = "subjAltNameExt"
@@ -479,11 +480,11 @@ class ExtensionType:
     POLICY_CONSTRAINTS = "policyConstraintsExt"
     NAME_CONSTRAINTS = "nameConstraintsExt"
     NETSCAPE_CERT_TYPE = "netscapeCertTypeExt"
-    
+
 class ExtensionTypes:
     #hackish way to enumerate known extensions without writing them twice
     knownExtensions = [name for (attr, name) in vars(ExtensionType).items() if attr.isupper()]
-    
+
 class Extension():
     '''
     Represents one Extension in X509v3 certificate
@@ -508,16 +509,16 @@ class Extension():
         "2.5.29.30": (NameConstraints(),              lambda v: NameConstraintsExt(v),                ExtensionType.NAME_CONSTRAINTS),
         "2.16.840.1.113730.1.1": (NetscapeCertType(), lambda v: NetscapeCertTypeExt(v),               ExtensionType.NETSCAPE_CERT_TYPE),
     }
-    
+
     def __init__(self, extension):
         self.id = tuple_to_OID(extension.getComponentByName("extnID"))
         critical = extension.getComponentByName("critical")
         self.is_critical = (critical != 0)
         self.ext_type = None
-        
+
         # set the bytes as the extension value
         self.value = extension.getComponentByName("extnValue")._value
-        
+
         # if we know the type of value, parse it
         decoderTuple = Extension._extensionDecoders.get(self.id)
         if decoderTuple is not None:
@@ -544,7 +545,7 @@ class Certificate():
     - issuer (who issued this certificate)
     - validity
     - subject (for who the certificate was issued)
-    - pub_key_info 
+    - pub_key_info
     - issuer_uid (optional)
     - subject_uid (optional)
     - extensions (list of extensions)
@@ -557,34 +558,34 @@ class Certificate():
         self.validity = ValidityInterval(tbsCertificate.getComponentByName("validity"))
         self.subject = Name(tbsCertificate.getComponentByName("subject"))
         self.pub_key_info = PublicKeyInfo(tbsCertificate.getComponentByName("subjectPublicKeyInfo"))
-        
+
         issuer_uid = tbsCertificate.getComponentByName("issuerUniqueID")
         if issuer_uid:
             self.issuer_uid = issuer_uid.toOctets()
         else:
             self.issuer_uid = None
-            
+
         subject_uid = tbsCertificate.getComponentByName("subjectUniqueID")
         if subject_uid:
             self.subject_uid = subject_uid.toOctets()
         else:
             self.subject_uid = None
-            
+
         self.extensions = self._create_extensions_list(tbsCertificate.getComponentByName('extensions'))
-        
+
         #make known extensions accessible through attributes
         for extAttrName in ExtensionTypes.knownExtensions:
             setattr(self, extAttrName, None)
         for ext in self.extensions:
             if ext.ext_type:
                 setattr(self, ext.ext_type, ext)
-    
+
     def _create_extensions_list(self, extensions):
         if extensions is None:
             return []
-        
+
         return [Extension(ext) for ext in extensions]
-    
+
 class X509Certificate():
     '''
     Represents X509 certificate.
@@ -593,16 +594,16 @@ class X509Certificate():
     - signature
     - tbsCertificate (the certificate)
     '''
-    
+
     def __init__(self, certificate):
         self.signature_algorithm = str(certificate.getComponentByName("signatureAlgorithm"))
-        self.signature = certificate.getComponentByName("signatureValue").toOctets()     
+        self.signature = certificate.getComponentByName("signatureValue").toOctets()
         tbsCert = certificate.getComponentByName("tbsCertificate")
-        self.tbsCertificate = Certificate(tbsCert)   
+        self.tbsCertificate = Certificate(tbsCert)
         self.verification_results = None
         self.raw_der_data = "" # raw der data for storage are kept here by cert_manager
         self.check_crl = True
-    
+
     def is_verified(self, ignore_missing_crl_check=False):
       '''
       Checks if all values of verification_results dictionary are True,
@@ -611,7 +612,7 @@ class X509Certificate():
       return self._evaluate_verification_results(
                         self.verification_results,
                         ignore_missing_crl_check=ignore_missing_crl_check)
-    
+
     def valid_at_date(self, date, ignore_missing_crl_check=False):
       """check validity of all parts of the certificate with regard
       to a specific date"""
@@ -619,7 +620,7 @@ class X509Certificate():
       return self._evaluate_verification_results(
                         verification_results,
                         ignore_missing_crl_check=ignore_missing_crl_check)
-    
+
     def _evaluate_verification_results(self, verification_results,
                                        ignore_missing_crl_check=False):
       if verification_results is None:
@@ -633,8 +634,8 @@ class X509Certificate():
         else:
           return False
       return True
-      
-    
+
+
     def verification_results_at_date(self, date):
       if self.verification_results is None:
         return None
@@ -653,7 +654,7 @@ class X509Certificate():
       to_date = self.tbsCertificate.validity.get_valid_to_as_datetime()
       time_ok = to_date >= date >= from_date
       return time_ok
-    
+
     def crl_validity_at_date(self, date):
       """check if the certificate was not on the CRL list at a particular date"""
       rev_date = self.get_revocation_date()
@@ -663,7 +664,7 @@ class X509Certificate():
         return False
       else:
         return True
-      
+
     def get_revocation_date(self):
       from certs.crl_store import CRL_cache_manager
       cache = CRL_cache_manager.get_cache()
@@ -673,8 +674,8 @@ class X509Certificate():
         return None
       rev_date = ValidityInterval.parse_date(rev_date)
       return rev_date
-    
-        
+
+
 class Attribute():
     """
     One attribute in SignerInfo attributes set
@@ -698,9 +699,9 @@ class SignerInfo():
     Represents information about a signer.
     Attributes:
     - version
-    - issuer 
+    - issuer
     - serial_number (of the certificate used to verify this signature)
-    - digest_algorithm 
+    - digest_algorithm
     - encryp_algorithm
     - signature
     - auth_atributes (optional field, contains authenticated attributes)
@@ -742,7 +743,7 @@ class TsAccuracy():
 
 class TimeStampToken():
     '''
-    Holder for Timestamp Token Info - attribute from the qtimestamp.    
+    Holder for Timestamp Token Info - attribute from the qtimestamp.
     '''
     def __init__(self, asn1_tstInfo):
         self.version = asn1_tstInfo.getComponentByName("version")._value
@@ -757,7 +758,7 @@ class TimeStampToken():
         # place for certificates transformed to X509Certificate
         self.certificates = []
         #self.extensions = asn1_tstInfo.getComponentByName("extensions")
-    
+
     def certificates_contain(self, cert_serial_num):
         """
         Checks if set of certificates of this timestamp contains
@@ -768,7 +769,7 @@ class TimeStampToken():
           if cert.tbsCertificate.serial_number == cert_serial_num:
             return True
         return False
-    
+
     def get_genTime_as_datetime(self):
       """
       parses the genTime string and returns a datetime object;
